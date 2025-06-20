@@ -1,47 +1,66 @@
-from flask import Flask, render_template, request, jsonify
-import requests
+"""
+Wikipedia Article Explorer with Real-time Search Tree
+A Flask application that allows users to explore Wikipedia articles and visualize
+Google Gemini's recursive search process in real-time.
+"""
+
+import logging
+from flask import Flask
 from flask_socketio import SocketIO
-from googlesearch import search
-from functools import lru_cache
-from claude import Claude
-import threading
 
-def run_claude(socketio, url):
-    c = Claude(socketio)
-    root,output = c.main(url)
-    socketio.emit('update_root', {'root': str(root), 'output': output})
+from config import Config
+from utils.rate_limiter import RateLimiter
+from services.gemini_service import GeminiService
+from services.search_engine import RecursiveSearchEngine
+from routes.main_routes import main_bp
+from routes.socket_handlers import register_socket_handlers
 
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, Config.LOG_LEVEL.upper()),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-socketio = SocketIO(app)
+def create_app():
+    """Create and configure the Flask application."""
+    app = Flask(__name__)
+    app.config.from_object(Config)
 
-def mock_search(query):
-    search_results = []
-    for url in search(query, num_results=20):
-        if len(search_results) == 5:
-            break
-        else:
-            search_results.append({
-                'url': url,
-            })
-    return search_results
+    # Initialize SocketIO
+    socketio = SocketIO(app, cors_allowed_origins="*", logger=Config.DEBUG, engineio_logger=Config.DEBUG)
 
-@app.route('/')
-def index():
-    return render_template("index.html")
+    # Initialize services
+    rate_limiter = RateLimiter(max_calls_per_minute=Config.MAX_CALLS_PER_MINUTE)
+    gemini_service = GeminiService(rate_limiter)
+    search_engine = RecursiveSearchEngine(socketio, gemini_service)
 
-@app.route('/search', methods=['POST'])
-def search_view():
-    data = request.get_json()
-    query = data.get('query')
-    results = mock_search(query)
-    print(results)
-    return jsonify({'results': results})
+    # Register blueprints
+    app.register_blueprint(main_bp)
 
-@app.route('/click')
-def click_view():
-    url = request.args.get('url')
-    threading.Thread(target=run_claude, args=(socketio, url)).start()
-    return render_template("click/index.html", url=url)
+    # Register socket handlers
+    register_socket_handlers(socketio, search_engine, rate_limiter)
 
+    # Store services in app context for access in routes
+    app.rate_limiter = rate_limiter
+    app.gemini_service = gemini_service
+    app.search_engine = search_engine
 
+    logger.info("Wikipedia Explorer application created successfully")
+    logger.info(f"Gemini service available: {gemini_service.is_available()}")
+    logger.info(f"Model info: {gemini_service.get_model_info()}")
+    logger.info(f"Rate limiting: {Config.MAX_CALLS_PER_MINUTE} calls per minute")
+
+    return app, socketio
+
+# Create the application
+app, socketio = create_app()
+
+# Make services available for imports (for backward compatibility)
+rate_limiter = app.rate_limiter
+gemini_service = app.gemini_service
+search_engine = app.search_engine
+
+if __name__ == '__main__':
+    logger.info("Starting Wikipedia Explorer with Google Gemini...")
+    socketio.run(app, debug=Config.DEBUG, host=Config.HOST, port=Config.PORT)

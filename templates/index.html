@@ -1,20 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trace - News Explorer</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikipedia Explorer - Powered by Google Gemini</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <div class="container">
-    <h1>Trace - News Explorer</h1>
-    <!-- Minimal search bar placeholder -->
-    <form id="searchForm" onsubmit="return false;">
-        <input type="text" id="searchInput" value="The effect of deepseek on LLMs">
-    </form>
-    <div id="resultsContainer"></div>
-  </div>
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <div class="container">
+        <header class="header">
+            <h1 class="header__title">Wikipedia Explorer</h1>
+            <p class="header__subtitle">Discover trending articles and explore their connections with Google Gemini</p>
+            <div class="header__ai-badge">
+                <span class="ai-badge ai-badge--gemini">
+                    <span class="ai-badge__icon">✨</span>
+                    <span class="ai-badge__text">Powered by Google Gemini</span>
+                </span>
+            </div>
+        </header>
+
+        <main class="main">
+            <section class="loading" id="loading">
+                <div class="loading__spinner"></div>
+                <p class="loading__text">Loading trending articles...</p>
+            </section>
+
+            <section class="articles" id="articles-container" style="display: none;">
+                <h2 class="articles__title">Trending Articles</h2>
+                <p class="articles__description">
+                    Click on any article to see how Google Gemini explores related topics in real-time
+                </p>
+                <div class="articles__grid" id="articles-grid">
+                    <!-- Articles will be populated here -->
+                </div>
+            </section>
+
+            <section class="error" id="error-container" style="display: none;">
+                <div class="error__content">
+                    <h2 class="error__title">Oops! Something went wrong</h2>
+                    <p class="error__message" id="error-message"></p>
+                    <button class="error__retry btn btn--primary" onclick="loadTrendingArticles()">
+                        Try Again
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
