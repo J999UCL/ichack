@@ -3,7 +3,10 @@ Configuration settings for Wikipedia Explorer
 """
 
 import os
-from typing import Optional
+
+from flask import Flask
+
+app = Flask(__name__)
 
 class Config:
     # Flask settings
@@ -11,7 +14,7 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
     # Google Gemini settings
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyDcFrchaV_Zvx19gfJTlLqBwFaHYbPKl4Y')
+    GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
     MAX_TOKENS = int(os.getenv('MAX_TOKENS', '100'))
     TEMPERATURE = float(os.getenv('TEMPERATURE', '0.7'))

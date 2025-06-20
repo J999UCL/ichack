@@ -3,11 +3,8 @@
  * Handles real-time tree updates via WebSocket with Gemini integration
  */
 
-// Import Socket.IO
-const io = require("socket.io-client")
-
-// Declare ARTICLE_TITLE variable
-const ARTICLE_TITLE = "Default Article Title" // This should be replaced with the actual value or imported correctly
+// Declare io variable before using it
+let io
 
 class TreeVisualizer {
   constructor(articleTitle) {
@@ -17,84 +14,158 @@ class TreeVisualizer {
     this.isSearching = false
     this.rateLimitTimer = null
 
+    // Get DOM elements
     this.treeVisualization = document.getElementById("tree-visualization")
     this.statusIndicator = document.getElementById("status-indicator")
     this.startSearchBtn = document.getElementById("start-search")
     this.expandAllBtn = document.getElementById("expand-all")
     this.collapseAllBtn = document.getElementById("collapse-all")
 
+    console.log("🚀 TreeVisualizer initialized for:", this.articleTitle)
+    console.log("📊 DOM elements found:", {
+      treeVisualization: !!this.treeVisualization,
+      statusIndicator: !!this.statusIndicator,
+      startSearchBtn: !!this.startSearchBtn,
+      expandAllBtn: !!this.expandAllBtn,
+      collapseAllBtn: !!this.collapseAllBtn,
+    })
+
     this.init()
   }
 
   init() {
-    console.log("Initializing TreeVisualizer for:", this.articleTitle)
     this.initializeSocket()
     this.bindEvents()
     this.showPlaceholder()
   }
 
   initializeSocket() {
-    console.log("Initializing Socket.IO connection...")
+    console.log("🔌 Initializing Socket.IO connection...")
 
-    // Initialize Socket.IO connection (io is loaded from CDN)
-    this.socket = io()
+    // Check if io is available from the CDN
+    if (typeof io === "undefined") {
+      console.error("❌ Socket.IO not loaded! Check if the CDN script is working.")
+      this.updateStatus("error", "Socket.IO library not available")
+      return
+    }
 
-    this.socket.on("connect", () => {
-      console.log("✅ Connected to server")
-      this.updateStatus("connected", "Connected to server")
-    })
+    try {
+      // Initialize Socket.IO connection with proper configuration
+      this.socket = io({
+        transports: ["websocket", "polling"],
+        timeout: 10000,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        forceNew: false,
+      })
 
-    this.socket.on("disconnect", () => {
-      console.log("❌ Disconnected from server")
-      this.updateStatus("error", "Disconnected from server")
-    })
+      console.log("🔌 Socket.IO instance created:", this.socket)
 
-    this.socket.on("tree_update", (treeData) => {
-      console.log("📊 Tree update received:", treeData)
-      this.treeData = treeData
-      this.renderTree()
-    })
+      // Connection events
+      this.socket.on("connect", () => {
+        console.log("✅ Connected to server! Socket ID:", this.socket.id)
+        this.updateStatus("connected", "Connected to server")
 
-    this.socket.on("search_started", (data) => {
-      console.log("🔍 Search started:", data)
-      this.updateStatus("searching", `${data.ai_provider || "Gemini"} is analyzing articles...`)
-    })
+        // Enable the search button
+        if (this.startSearchBtn) {
+          this.startSearchBtn.disabled = false
+        }
+      })
 
-    this.socket.on("search_complete", (data) => {
-      console.log("✅ Search complete:", data)
-      this.isSearching = false
-      this.startSearchBtn.disabled = false
-      this.startSearchBtn.innerHTML = `
-        <span class="btn__icon">✨</span>
-        Start New Gemini Search
-      `
-      this.updateStatus("connected", `Search complete! Found ${data.total_nodes || 0} articles.`)
-    })
+      this.socket.on("disconnect", (reason) => {
+        console.log("❌ Disconnected from server. Reason:", reason)
+        this.updateStatus("error", `Disconnected: ${reason}`)
 
-    this.socket.on("rate_limit_warning", (data) => {
-      console.log("⚠️ Rate limit warning:", data)
-      this.handleRateLimit(data.message, data.wait_time)
-    })
+        // Disable the search button
+        if (this.startSearchBtn) {
+          this.startSearchBtn.disabled = true
+        }
+      })
 
-    this.socket.on("error", (error) => {
-      console.error("❌ Socket error:", error)
-      this.updateStatus("error", "Error: " + error.message)
-      this.isSearching = false
-      this.startSearchBtn.disabled = false
-      this.startSearchBtn.innerHTML = `
-        <span class="btn__icon">✨</span>
-        Start Gemini Search
-      `
-    })
+      this.socket.on("connect_error", (error) => {
+        console.error("❌ Connection error:", error)
+        this.updateStatus("error", `Connection failed: ${error.message || error}`)
+      })
 
-    this.socket.on("connect_error", (error) => {
-      console.error("❌ Connection error:", error)
-      this.updateStatus("error", "Connection failed - check server")
-    })
+      this.socket.on("reconnect", (attemptNumber) => {
+        console.log("🔄 Reconnected after", attemptNumber, "attempts")
+        this.updateStatus("connected", "Reconnected to server")
+      })
+
+      this.socket.on("reconnect_error", (error) => {
+        console.error("❌ Reconnection error:", error)
+        this.updateStatus("error", "Reconnection failed")
+      })
+
+      // Search events
+      this.socket.on("search_started", (data) => {
+        console.log("🔍 Search started:", data)
+        this.updateStatus("searching", `${data.ai_provider || "Gemini"} is analyzing articles...`)
+      })
+
+      this.socket.on("tree_update", (treeData) => {
+        console.log("📊 Tree update received:", treeData)
+        this.treeData = treeData
+        this.renderTree()
+      })
+
+      this.socket.on("search_complete", (data) => {
+        console.log("✅ Search complete:", data)
+        this.isSearching = false
+
+        if (this.startSearchBtn) {
+          this.startSearchBtn.disabled = false
+          this.startSearchBtn.innerHTML = `
+            <span class="btn__icon">✨</span>
+            Start New Gemini Search
+          `
+        }
+
+        this.updateStatus(
+          "connected",
+          `Search complete! Found ${data.total_nodes || Object.keys(this.treeData).length} articles.`,
+        )
+      })
+
+      this.socket.on("rate_limit_warning", (data) => {
+        console.log("⚠️ Rate limit warning:", data)
+        this.handleRateLimit(data.message, data.wait_time)
+      })
+
+      this.socket.on("error", (error) => {
+        console.error("❌ Socket error:", error)
+        this.updateStatus("error", "Error: " + (error.message || error))
+        this.isSearching = false
+
+        if (this.startSearchBtn) {
+          this.startSearchBtn.disabled = false
+          this.startSearchBtn.innerHTML = `
+            <span class="btn__icon">✨</span>
+            Start Gemini Search
+          `
+        }
+      })
+
+      // Test events
+      this.socket.on("connected", (data) => {
+        console.log("📡 Server connection confirmed:", data)
+      })
+
+      this.socket.on("pong", (data) => {
+        console.log("🏓 Pong received:", data)
+      })
+
+      // Initial connection attempt
+      console.log("🔄 Attempting to connect...")
+    } catch (error) {
+      console.error("❌ Failed to initialize socket:", error)
+      this.updateStatus("error", "Failed to initialize connection")
+    }
   }
 
   bindEvents() {
-    console.log("Binding event listeners...")
+    console.log("🔗 Binding event listeners...")
 
     if (this.startSearchBtn) {
       this.startSearchBtn.addEventListener("click", (e) => {
@@ -110,7 +181,6 @@ class TreeVisualizer {
     if (this.expandAllBtn) {
       this.expandAllBtn.addEventListener("click", (e) => {
         e.preventDefault()
-        console.log("📖 Expand all button clicked")
         this.expandAll()
       })
     }
@@ -118,7 +188,6 @@ class TreeVisualizer {
     if (this.collapseAllBtn) {
       this.collapseAllBtn.addEventListener("click", (e) => {
         e.preventDefault()
-        console.log("📕 Collapse all button clicked")
         this.collapseAll()
       })
     }
@@ -132,20 +201,40 @@ class TreeVisualizer {
       return
     }
 
-    if (!this.socket || !this.socket.connected) {
+    if (!this.socket) {
+      console.error("❌ Socket not initialized")
+      this.updateStatus("error", "Connection not initialized")
+      return
+    }
+
+    if (!this.socket.connected) {
       console.error("❌ Socket not connected")
       this.updateStatus("error", "Not connected to server")
+
+      // Try to reconnect
+      console.log("🔄 Attempting to reconnect...")
+      this.socket.connect()
+      return
+    }
+
+    if (!this.articleTitle) {
+      console.error("❌ No article title")
+      this.updateStatus("error", "No article title specified")
       return
     }
 
     console.log("🔍 Starting search for:", this.articleTitle)
 
+    // Update UI
     this.isSearching = true
-    this.startSearchBtn.disabled = true
-    this.startSearchBtn.innerHTML = `
-      <span class="btn__icon">⏳</span>
-      Gemini is searching...
-    `
+    if (this.startSearchBtn) {
+      this.startSearchBtn.disabled = true
+      this.startSearchBtn.innerHTML = `
+        <span class="btn__icon">⏳</span>
+        Gemini is searching...
+      `
+    }
+
     this.updateStatus("searching", "Starting Gemini search...")
 
     // Clear previous tree data
@@ -153,19 +242,37 @@ class TreeVisualizer {
     this.renderTree()
 
     // Emit start search event
-    console.log("📡 Emitting start_search event...")
-    this.socket.emit("start_search", {
+    const searchData = {
       article_title: this.articleTitle,
-    })
+    }
 
-    console.log("✅ Search request sent")
+    console.log("📡 Emitting start_search event with data:", searchData)
+
+    try {
+      this.socket.emit("start_search", searchData)
+      console.log("✅ Search request sent successfully")
+    } catch (error) {
+      console.error("❌ Failed to emit search request:", error)
+      this.updateStatus("error", "Failed to send search request")
+      this.isSearching = false
+      if (this.startSearchBtn) {
+        this.startSearchBtn.disabled = false
+        this.startSearchBtn.innerHTML = `
+          <span class="btn__icon">✨</span>
+          Start Gemini Search
+        `
+      }
+    }
   }
 
   handleRateLimit(message, waitTime) {
     console.log("⏳ Handling rate limit:", message, waitTime)
 
     this.updateStatus("warning", message)
-    this.startSearchBtn.disabled = true
+
+    if (this.startSearchBtn) {
+      this.startSearchBtn.disabled = true
+    }
 
     // Clear any existing timer
     if (this.rateLimitTimer) {
@@ -179,19 +286,25 @@ class TreeVisualizer {
       if (remainingTime <= 0) {
         clearInterval(this.rateLimitTimer)
         this.rateLimitTimer = null
-        this.startSearchBtn.disabled = false
-        this.startSearchBtn.innerHTML = `
-          <span class="btn__icon">✨</span>
-          Start Gemini Search
-        `
+
+        if (this.startSearchBtn) {
+          this.startSearchBtn.disabled = false
+          this.startSearchBtn.innerHTML = `
+            <span class="btn__icon">✨</span>
+            Start Gemini Search
+          `
+        }
+
         this.updateStatus("connected", "Ready to search")
         return
       }
 
-      this.startSearchBtn.innerHTML = `
-        <span class="btn__icon">⏳</span>
-        Wait ${remainingTime}s (Rate Limited)
-      `
+      if (this.startSearchBtn) {
+        this.startSearchBtn.innerHTML = `
+          <span class="btn__icon">⏳</span>
+          Wait ${remainingTime}s (Rate Limited)
+        `
+      }
 
       remainingTime--
     }
@@ -202,6 +315,11 @@ class TreeVisualizer {
   }
 
   renderTree() {
+    if (!this.treeVisualization) {
+      console.error("❌ Tree visualization element not found")
+      return
+    }
+
     if (Object.keys(this.treeData).length === 0) {
       this.showPlaceholder()
       return
@@ -212,7 +330,7 @@ class TreeVisualizer {
     // Find root node
     const rootNode = Object.values(this.treeData).find((node) => !node.parent_id)
     if (!rootNode) {
-      console.log("❌ No root node found")
+      console.log("❌ No root node found in tree data")
       return
     }
 
@@ -221,27 +339,37 @@ class TreeVisualizer {
     // Clear visualization
     this.treeVisualization.innerHTML = ""
 
+    // Create tree container
+    const treeContainer = document.createElement("div")
+    treeContainer.className = "tree-container-inner"
+
     // Render tree starting from root
     const treeElement = this.createTreeElement(rootNode, true)
-    this.treeVisualization.appendChild(treeElement)
+    treeContainer.appendChild(treeElement)
+
+    this.treeVisualization.appendChild(treeContainer)
 
     // Update search status
     if (this.isSearchComplete()) {
       this.isSearching = false
-      this.startSearchBtn.disabled = false
-      this.startSearchBtn.innerHTML = `
-        <span class="btn__icon">✨</span>
-        Start New Gemini Search
-      `
+      if (this.startSearchBtn) {
+        this.startSearchBtn.disabled = false
+        this.startSearchBtn.innerHTML = `
+          <span class="btn__icon">✨</span>
+          Start New Gemini Search
+        `
+      }
       this.updateStatus("connected", "Gemini search complete!")
     }
   }
 
   showPlaceholder() {
+    if (!this.treeVisualization) return
+
     this.treeVisualization.innerHTML = `
       <div class="tree-placeholder">
         <div class="tree-placeholder__icon">🌳</div>
-        <h3 class="tree-placeholder__title">Ready to Explore</h3>
+        <h3 class="tree-placeholder__title">Ready to Explore: ${this.escapeHtml(this.articleTitle)}</h3>
         <p class="tree-placeholder__text">
           Click "Start Gemini Search" to watch as Google Gemini discovers and maps 
           related articles in real-time, building a knowledge tree before your eyes.
@@ -338,8 +466,14 @@ class TreeVisualizer {
 
   updateStatus(type, message) {
     console.log(`📊 Status update: ${type} - ${message}`)
-    this.statusIndicator.className = `status-indicator status-indicator--${type}`
-    this.statusIndicator.querySelector(".status-indicator__text").textContent = message
+
+    if (this.statusIndicator) {
+      this.statusIndicator.className = `status-indicator status-indicator--${type}`
+      const textElement = this.statusIndicator.querySelector(".status-indicator__text")
+      if (textElement) {
+        textElement.textContent = message
+      }
+    }
   }
 
   isSearchComplete() {
@@ -365,14 +499,38 @@ class TreeVisualizer {
   }
 
   formatTimestamp(timestamp) {
-    const date = new Date(timestamp)
-    return date.toLocaleTimeString()
+    try {
+      const date = new Date(timestamp)
+      return date.toLocaleTimeString()
+    } catch (error) {
+      return "Unknown"
+    }
   }
 
   escapeHtml(text) {
     const div = document.createElement("div")
-    div.textContent = text
+    div.textContent = text || ""
     return div.innerHTML
+  }
+
+  // Public methods for debugging
+  testConnection() {
+    if (this.socket) {
+      console.log("🧪 Testing socket connection...")
+      this.socket.emit("test", { message: "Debug test from tree visualizer" })
+    } else {
+      console.error("❌ Socket not available")
+    }
+  }
+
+  getStatus() {
+    return {
+      isSearching: this.isSearching,
+      socketConnected: this.socket?.connected || false,
+      treeDataCount: Object.keys(this.treeData).length,
+      articleTitle: this.articleTitle,
+      socketId: this.socket?.id,
+    }
   }
 }
 
@@ -380,58 +538,42 @@ class TreeVisualizer {
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 DOM loaded, initializing TreeVisualizer...")
 
-  // Get article title from the template variable
-  if (typeof ARTICLE_TITLE !== "undefined" && ARTICLE_TITLE) {
-    console.log("📖 Article title:", ARTICLE_TITLE)
-    window.treeVisualizer = new TreeVisualizer(ARTICLE_TITLE)
-  } else {
-    console.error("❌ ARTICLE_TITLE not defined or empty")
+  // Get article title from the global variable set in the template
+  let articleTitle = null
 
+  // Declare ARTICLE_TITLE variable before using it
+  const ARTICLE_TITLE = window.ARTICLE_TITLE
+
+  if (typeof ARTICLE_TITLE !== "undefined" && ARTICLE_TITLE) {
+    articleTitle = ARTICLE_TITLE
+    console.log("📖 Article title from template:", articleTitle)
+  } else {
     // Fallback: try to get from URL
     const pathParts = window.location.pathname.split("/")
     if (pathParts.length >= 3 && pathParts[1] === "tree") {
-      const articleFromUrl = decodeURIComponent(pathParts[2])
-      console.log("🔄 Using article title from URL:", articleFromUrl)
-      window.treeVisualizer = new TreeVisualizer(articleFromUrl)
-    } else {
-      console.error("❌ Could not determine article title")
+      articleTitle = decodeURIComponent(pathParts[2])
+      console.log("🔄 Article title from URL:", articleTitle)
     }
   }
+
+  if (articleTitle) {
+    window.treeVisualizer = new TreeVisualizer(articleTitle)
+
+    // Add debug functions to global scope
+    window.debugTree = {
+      testConnection: () => window.treeVisualizer.testConnection(),
+      forceSearch: () => window.treeVisualizer.startSearch(),
+      getStatus: () => window.treeVisualizer.getStatus(),
+      reconnect: () => {
+        if (window.treeVisualizer.socket) {
+          window.treeVisualizer.socket.disconnect()
+          window.treeVisualizer.socket.connect()
+        }
+      },
+    }
+
+    console.log("🔧 Debug functions available: window.debugTree")
+  } else {
+    console.error("❌ Could not determine article title")
+  }
 })
-
-// Add some debugging functions to the global scope
-window.debugTree = {
-  testConnection: () => {
-    if (window.treeVisualizer && window.treeVisualizer.socket) {
-      console.log("🧪 Testing socket connection...")
-      window.treeVisualizer.socket.emit("test", { message: "Debug test" })
-    } else {
-      console.error("❌ TreeVisualizer or socket not available")
-    }
-  },
-
-  forceSearch: () => {
-    if (window.treeVisualizer) {
-      console.log("🧪 Forcing search start...")
-      window.treeVisualizer.startSearch()
-    } else {
-      console.error("❌ TreeVisualizer not available")
-    }
-  },
-
-  getStatus: () => {
-    if (window.treeVisualizer) {
-      return {
-        isSearching: window.treeVisualizer.isSearching,
-        socketConnected: window.treeVisualizer.socket?.connected,
-        treeDataCount: Object.keys(window.treeVisualizer.treeData).length,
-        articleTitle: window.treeVisualizer.articleTitle,
-      }
-    }
-    return null
-  },
-}
-
-console.log(
-  "🔧 Debug functions available: window.debugTree.testConnection(), window.debugTree.forceSearch(), window.debugTree.getStatus()",
-)

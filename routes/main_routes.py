@@ -66,8 +66,24 @@ def health_check():
         'status': 'healthy',
         'service': 'Wikipedia Explorer',
         'ai_provider': 'Google Gemini',
-        'ai_available': gemini_service.is_available()
+        'ai_available': gemini_service.is_available(),
+        'server_running': True
     })
+
+@main_bp.route('/api/socket-test')
+def socket_test():
+    """Test if Socket.IO server is running."""
+    try:
+        from app import socketio
+        return jsonify({
+            'socket_available': True,
+            'message': 'Socket.IO server is running'
+        })
+    except Exception as e:
+        return jsonify({
+            'socket_available': False,
+            'error': str(e)
+        }), 500
 
 @main_bp.route('/api/test-search', methods=['POST'])
 def test_search():

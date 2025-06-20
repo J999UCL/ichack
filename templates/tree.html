@@ -38,7 +38,7 @@
                         <button class="btn btn--secondary" id="collapse-all" type="button">Collapse All</button>
                     </div>
                     <div class="tree-controls__right">
-                        <button class="btn btn--primary btn--gemini" id="start-search" type="button">
+                        <button class="btn btn--primary btn--gemini" id="start-search" type="button" disabled>
                             <span class="btn__icon">✨</span>
                             Start Gemini Search
                         </button>
@@ -54,7 +54,7 @@
 
     <!-- Debug panel (only visible in development) -->
     <div id="debug-panel" style="position: fixed; bottom: 10px; right: 10px; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 12px; display: none;">
-        <div>Article: <span id="debug-article"></span></div>
+        <div>Article: <span id="debug-article">{{ article_title }}</span></div>
         <div>Socket: <span id="debug-socket">❌</span></div>
         <div>Searching: <span id="debug-searching">❌</span></div>
         <button onclick="window.debugTree?.testConnection()" style="margin-top: 5px;">Test Connection</button>
@@ -62,14 +62,14 @@
         <button onclick="toggleDebugPanel()" style="margin-top: 5px;">Hide</button>
     </div>
 
-    <!-- Load Socket.IO from CDN -->
+    <!-- Load Socket.IO from CDN FIRST -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
 
-    <!-- Pass article title to JavaScript -->
+    <!-- Pass article title to JavaScript BEFORE loading our script -->
     <script>
-        // Make article title available globally
-        const ARTICLE_TITLE = "{{ article_title }}";
-        console.log("📖 Article title from template:", ARTICLE_TITLE);
+        // Make article title available globally BEFORE tree.js loads
+        window.ARTICLE_TITLE = "{{ article_title }}";
+        console.log("📖 Article title set globally:", window.ARTICLE_TITLE);
 
         // Debug panel functions
         function toggleDebugPanel() {
@@ -78,11 +78,12 @@
         }
 
         function updateDebugInfo() {
-            if (window.treeVisualizer) {
+            if (window.treeVisualizer && window.debugTree) {
                 const status = window.debugTree.getStatus();
-                document.getElementById('debug-article').textContent = status?.articleTitle || 'Unknown';
-                document.getElementById('debug-socket').textContent = status?.socketConnected ? '✅' : '❌';
-                document.getElementById('debug-searching').textContent = status?.isSearching ? '🔍' : '❌';
+                if (status) {
+                    document.getElementById('debug-socket').textContent = status.socketConnected ? '✅' : '❌';
+                    document.getElementById('debug-searching').textContent = status.isSearching ? '🔍' : '❌';
+                }
             }
         }
 
@@ -111,9 +112,19 @@
                 }
             }
         });
+
+        // Test Socket.IO availability immediately
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🔍 Testing Socket.IO availability...');
+            if (typeof io !== 'undefined') {
+                console.log('✅ Socket.IO loaded successfully');
+            } else {
+                console.error('❌ Socket.IO not loaded!');
+            }
+        });
     </script>
 
-    <!-- Load our tree visualization script -->
+    <!-- Load our tree visualization script AFTER Socket.IO and article title are set -->
     <script src="{{ url_for('static', filename='js/tree.js') }}"></script>
 </body>
 </html>

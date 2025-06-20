@@ -16,9 +16,10 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
         """Handle client connection."""
         logger.info(f"✅ Client connected: {request.sid}")
         emit('connected', {
-            'message': 'Connected to server',
+            'message': 'Connected to server successfully',
             'session_id': request.sid,
-            'ai_provider': 'Google Gemini'
+            'ai_provider': 'Google Gemini',
+            'timestamp': str(request.sid)
         })
 
     @socketio.on('disconnect')
@@ -29,17 +30,31 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
     @socketio.on('start_search')
     def handle_start_search(data):
         """Handle WebSocket request to start recursive search."""
-        article_title = data.get('article_title')
         session_id = request.sid
 
         logger.info(f"🔍 Received start_search request from session {session_id}")
-        logger.info(f"📖 Article title: {article_title}")
         logger.info(f"📊 Request data: {data}")
 
+        # Validate request data
+        if not data:
+            logger.error("❌ No data provided in start_search request")
+            emit('error', {'message': 'No data provided'})
+            return
+
+        article_title = data.get('article_title')
         if not article_title:
             logger.error("❌ No article title provided")
             emit('error', {'message': 'Article title is required'})
             return
+
+        # Clean up the article title
+        article_title = article_title.strip()
+        if not article_title:
+            logger.error("❌ Empty article title provided")
+            emit('error', {'message': 'Article title cannot be empty'})
+            return
+
+        logger.info(f"📖 Article title: '{article_title}'")
 
         # Check rate limit before starting
         if not rate_limiter.can_make_call():
@@ -55,14 +70,21 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
 
         # Start search in background
         try:
-            socketio.start_background_task(
-                target=search_engine.start_search,
-                initial_article=article_title,
-                session_id=session_id
-            )
-            logger.info("✅ Background search task started")
+            def run_search():
+                try:
+                    search_engine.start_search(article_title, session_id)
+                except Exception as e:
+                    logger.error(f"❌ Search engine error: {e}", exc_info=True)
+                    socketio.emit('error', {
+                        'message': f'Search engine error: {str(e)}',
+                        'session_id': session_id
+                    }, room=session_id)
+
+            socketio.start_background_task(run_search)
+            logger.info("✅ Background search task started successfully")
+
         except Exception as e:
-            logger.error(f"❌ Failed to start background task: {e}")
+            logger.error(f"❌ Failed to start background task: {e}", exc_info=True)
             emit('error', {'message': f'Failed to start search: {str(e)}'})
 
     @socketio.on('test')
@@ -70,8 +92,18 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
         """Handle test message."""
         logger.info(f"🧪 Test message received from {request.sid}: {data}")
         emit('connected', {
-            'message': 'Test successful!',
+            'message': 'Test successful! Connection is working.',
             'echo': data,
+            'session_id': request.sid,
+            'timestamp': str(request.sid)
+        })
+
+    @socketio.on('ping')
+    def handle_ping():
+        """Handle ping for connection testing."""
+        logger.debug(f"🏓 Ping received from {request.sid}")
+        emit('pong', {
+            'timestamp': str(request.sid),
             'session_id': request.sid
         })
 
@@ -82,8 +114,8 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
         logger.info(f"📊 Rate limit status requested: {status}")
         emit('rate_limit_status', status)
 
-    @socketio.on('ping')
-    def handle_ping():
-        """Handle ping for connection testing."""
-        logger.debug(f"🏓 Ping received from {request.sid}")
-        emit('pong', {'timestamp': request.sid})
+    # Error handler
+    @socketio.on_error_default
+    def default_error_handler(e):
+        logger.error(f"❌ Socket.IO error: {e}", exc_info=True)
+        emit('error', {'message': f'Server error: {str(e)}'})
