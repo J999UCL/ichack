@@ -3,6 +3,7 @@ WebSocket event handlers for real-time communication
 """
 
 import logging
+import json
 from flask import request
 from flask_socketio import emit
 
@@ -41,20 +42,33 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
             emit('error', {'message': 'No data provided'})
             return
 
-        article_title = data.get('article_title')
-        if not article_title:
-            logger.error("❌ No article title provided")
-            emit('error', {'message': 'Article title is required'})
+        # Handle both old format (article_title) and new format (article_data)
+        article_data = None
+
+        if 'article_data' in data:
+            article_data = data['article_data']
+        elif 'article_title' in data:
+            # Convert old format to new format
+            article_data = {
+                'title': data['article_title'],
+                'url': '',
+                'snippet': '',
+                'image': '',
+                'source': ''
+            }
+
+        if not article_data or not article_data.get('title'):
+            logger.error("❌ No article data provided")
+            emit('error', {'message': 'Article data is required'})
             return
 
-        # Clean up the article title
-        article_title = article_title.strip()
+        article_title = article_data['title'].strip()
         if not article_title:
             logger.error("❌ Empty article title provided")
             emit('error', {'message': 'Article title cannot be empty'})
             return
 
-        logger.info(f"📖 Article title: '{article_title}'")
+        logger.info(f"📖 Article data: {article_data}")
 
         # Check rate limit before starting
         if not rate_limiter.can_make_call():
@@ -72,7 +86,7 @@ def register_socket_handlers(socketio, search_engine, rate_limiter):
         try:
             def run_search():
                 try:
-                    search_engine.start_search(article_title, session_id)
+                    search_engine.start_search(article_data, session_id)
                 except Exception as e:
                     logger.error(f"❌ Search engine error: {e}", exc_info=True)
                     socketio.emit('error', {

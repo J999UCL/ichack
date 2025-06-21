@@ -1,5 +1,5 @@
 """
-Recursive search engine for building article trees
+Recursive search engine for building article trees using Google Search
 """
 
 import logging
@@ -9,36 +9,45 @@ from typing import Dict, Optional
 
 from config import Config
 from models.search_tree import SearchTreeNode
-from services.wikipedia_api import WikipediaAPI
+from services.google_search_api import GoogleSearchAPI
 from services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 
 class RecursiveSearchEngine:
-    """Handles recursive article search with real-time tree updates."""
+    """Handles recursive article search with real-time tree updates using Google Search."""
 
     def __init__(self, socketio_instance, gemini_service: GeminiService):
         self.socketio = socketio_instance
         self.gemini_service = gemini_service
+        self.google_search = GoogleSearchAPI()
         self.search_tree: Dict[str, SearchTreeNode] = {}
 
-    def start_search(self, initial_article: str, session_id: str) -> None:
+    def start_search(self, initial_article_data: Dict, session_id: str) -> None:
         """Start recursive search and emit tree updates."""
-        logger.info(f"🚀 Starting recursive search for: '{initial_article}' (session: {session_id})")
+        article_title = initial_article_data.get('title', 'Unknown Article')
+        article_url = initial_article_data.get('url', '')
+
+        logger.info(f"🚀 Starting recursive search for: '{article_title}' (session: {session_id})")
 
         try:
             # Clear previous search tree
             self.search_tree = {}
 
-            # Create root node
-            root_node = SearchTreeNode(initial_article)
+            # Create root node with article data
+            root_node = SearchTreeNode(article_title)
+            root_node.url = article_url
+            root_node.snippet = initial_article_data.get('snippet', '')
+            root_node.image = initial_article_data.get('image', '')
+            root_node.source = initial_article_data.get('source', '')
+
             self.search_tree[root_node.id] = root_node
 
             logger.info(f"🌱 Created root node: {root_node.id}")
 
             # Emit search started event
             self.socketio.emit('search_started', {
-                'article': initial_article,
+                'article': article_title,
                 'ai_provider': 'Google Gemini',
                 'session_id': session_id
             }, room=session_id)
@@ -56,7 +65,7 @@ class RecursiveSearchEngine:
                 'session_id': session_id
             }, room=session_id)
 
-            logger.info(f"✅ Search completed for '{initial_article}' with {len(self.search_tree)} nodes")
+            logger.info(f"✅ Search completed for '{article_title}' with {len(self.search_tree)} nodes")
 
         except Exception as e:
             logger.error(f"❌ Error in start_search: {e}", exc_info=True)
@@ -80,59 +89,93 @@ class RecursiveSearchEngine:
             logger.info(f"⏳ Waiting {delay:.1f} seconds to avoid rate limits...")
             time.sleep(delay)
 
-            # Fetch article content
-            logger.info(f"📖 Fetching content for: {current_node.title}")
-            article_content = WikipediaAPI.get_article_content(current_node.title)
+            # Get article content if we have a URL (use snippet as fallback)
+            article_content = ""
+            if hasattr(current_node, 'snippet') and current_node.snippet:
+                article_content = current_node.snippet
 
-            if not article_content:
-                logger.warning(f"❌ Could not fetch content for: {current_node.title}")
-                current_node.set_error("Could not fetch article content")
-                self._emit_tree_update(session_id)
-                return
+            # If we have a URL, try to get more content
+            if hasattr(current_node, 'url') and current_node.url:
+                try:
+                    full_content = self.google_search.get_article_content(current_node.url)
+                    if full_content and len(full_content) > len(article_content):
+                        article_content = full_content[:1000]  # Limit content length
+                except Exception as e:
+                    logger.warning(f"Could not fetch full content from {current_node.url}: {e}")
 
-            logger.info(f"✅ Fetched {len(article_content)} characters of content")
-
-            # Use Gemini to find related articles (with rate limiting)
-            logger.info(f"🤖 Getting related articles from Gemini for: {current_node.title}")
-            related_articles = self.gemini_service.get_related_articles_with_retry(
-                article_content, current_node.title
+            # Use Gemini to find related search queries
+            logger.info(f"🤖 Getting related search queries from Gemini for: {current_node.title}")
+            search_queries = self.gemini_service.get_related_search_queries(
+                current_node.title, article_content
             )
 
-            if not related_articles:
-                logger.warning(f"❌ No related articles found for: {current_node.title}")
-                current_node.set_error("Could not find related articles")
+            if not search_queries:
+                logger.warning(f"❌ No search queries found for: {current_node.title}")
+                current_node.set_error("Could not generate related search queries")
                 self._emit_tree_update(session_id)
                 return
 
-            logger.info(f"✅ Found {len(related_articles)} related articles: {related_articles}")
+            logger.info(f"✅ Found {len(search_queries)} search queries: {search_queries}")
 
-            # Create child nodes
-            for i, article_title in enumerate(related_articles[:Config.MAX_ARTICLES_PER_LEVEL]):
-                logger.info(f"🌿 Creating child node {i+1}/{len(related_articles)}: {article_title}")
+            # Search for articles using each query and create child nodes
+            children_created = 0
+            for i, query in enumerate(search_queries[:Config.MAX_ARTICLES_PER_LEVEL]):
+                logger.info(f"🔍 Searching Google for query {i+1}/{len(search_queries)}: '{query}'")
 
-                child_node = SearchTreeNode(article_title, node_id)
-                self.search_tree[child_node.id] = child_node
-                current_node.add_child(child_node.id)
+                try:
+                    # Search Google for articles using this query
+                    search_results = self.google_search.search_articles(query, limit=3)
 
-                # Emit tree update
-                self._emit_tree_update(session_id)
+                    if search_results:
+                        # Take the best result (first one)
+                        best_result = search_results[0]
 
-                # Add delay between creating nodes
-                if i < len(related_articles) - 1:
-                    time.sleep(0.5)
+                        # Create child node with the actual website data
+                        child_node = SearchTreeNode(best_result['title'], node_id)
+                        child_node.url = best_result['url']
+                        child_node.snippet = best_result['snippet']
+                        child_node.image = best_result['image']
+                        child_node.source = best_result['source']
+                        child_node.search_query = query  # Store the query that found this result
 
-                # Continue recursive search
-                if depth < Config.MAX_SEARCH_DEPTH - 1:
-                    logger.info(f"🔄 Continuing recursive search for: {article_title}")
-                    self._recursive_search(child_node.id, depth + 1, session_id)
-                else:
-                    logger.info(f"📏 Max depth reached, marking {article_title} as completed")
-                    child_node.set_completed()
-                    self._emit_tree_update(session_id)
+                        self.search_tree[child_node.id] = child_node
+                        current_node.add_child(child_node.id)
+                        children_created += 1
+
+                        logger.info(f"🌿 Created child node: '{best_result['title']}' from '{best_result['source']}'")
+                        logger.info(f"   📄 URL: {best_result['url']}")
+                        logger.info(f"   🔍 Found via query: '{query}'")
+
+                        # Emit tree update to show the new node
+                        self._emit_tree_update(session_id)
+
+                        # Add small delay between creating nodes for better UX
+                        if i < len(search_queries) - 1:
+                            time.sleep(0.8)
+
+                        # Continue recursive search for this child node
+                        if depth < Config.MAX_SEARCH_DEPTH - 1:
+                            logger.info(f"🔄 Continuing recursive search for: '{best_result['title']}'")
+                            self._recursive_search(child_node.id, depth + 1, session_id)
+                        else:
+                            logger.info(f"📏 Max depth reached, marking '{best_result['title']}' as completed")
+                            child_node.set_completed()
+                            self._emit_tree_update(session_id)
+                    else:
+                        logger.warning(f"❌ No search results found for query: '{query}'")
+
+                except Exception as e:
+                    logger.error(f"❌ Error searching for query '{query}': {e}")
+                    continue
 
             # Mark current node as completed
-            logger.info(f"✅ Marking node as completed: {current_node.title}")
-            current_node.set_completed()
+            if children_created > 0:
+                logger.info(f"✅ Successfully created {children_created} child nodes for: {current_node.title}")
+                current_node.set_completed()
+            else:
+                logger.warning(f"⚠️ No child nodes created for: {current_node.title}")
+                current_node.set_error("No related articles found")
+
             self._emit_tree_update(session_id)
 
         except Exception as e:
@@ -149,7 +192,10 @@ class RecursiveSearchEngine:
         }
 
         logger.info(f"📡 Emitting tree update to {session_id}: {len(tree_data)} nodes")
-        logger.debug(f"Tree data: {list(tree_data.keys())}")
+
+        # Log some details about the nodes for debugging
+        for node_id, node_data in tree_data.items():
+            logger.debug(f"  Node: {node_data['title']} | Status: {node_data['status']} | URL: {node_data.get('url', 'N/A')}")
 
         self.socketio.emit('tree_update', tree_data, room=session_id)
 

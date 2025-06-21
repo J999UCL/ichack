@@ -5,7 +5,6 @@ Search tree models and data structures
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-
 class SearchTreeNode:
     """Represents a node in the search tree."""
 
@@ -18,6 +17,13 @@ class SearchTreeNode:
         self.timestamp = datetime.now().isoformat()
         self.error_message: Optional[str] = None
 
+        # Additional fields for Google Search results
+        self.url: Optional[str] = None
+        self.snippet: Optional[str] = None
+        self.image: Optional[str] = None
+        self.source: Optional[str] = None
+        self.search_query: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert node to dictionary for JSON serialization."""
         return {
@@ -27,7 +33,12 @@ class SearchTreeNode:
             'children': self.children,
             'status': self.status,
             'timestamp': self.timestamp,
-            'error_message': self.error_message
+            'error_message': self.error_message,
+            'url': self.url,
+            'snippet': self.snippet,
+            'image': self.image,
+            'source': self.source,
+            'search_query': self.search_query
         }
 
     def add_child(self, child_id: str) -> None:

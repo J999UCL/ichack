@@ -3,12 +3,13 @@
  * Handles real-time tree updates via WebSocket with Gemini integration
  */
 
-// Declare io variable before using it
-let io
+// Import Socket.IO from CDN
+const io = window.io
 
 class TreeVisualizer {
-  constructor(articleTitle) {
-    this.articleTitle = articleTitle
+  constructor(articleData) {
+    this.articleData = articleData
+    this.articleTitle = articleData.title
     this.socket = null
     this.treeData = {}
     this.isSearching = false
@@ -48,6 +49,8 @@ class TreeVisualizer {
       this.updateStatus("error", "Socket.IO library not available")
       return
     }
+
+    console.log("✅ Socket.IO library is available")
 
     try {
       // Initialize Socket.IO connection with proper configuration
@@ -101,7 +104,7 @@ class TreeVisualizer {
       // Search events
       this.socket.on("search_started", (data) => {
         console.log("🔍 Search started:", data)
-        this.updateStatus("searching", `${data.ai_provider || "Gemini"} is analyzing articles...`)
+        this.updateStatus("searching", `${data.ai_provider || "Gemini"} is finding related websites...`)
       })
 
       this.socket.on("tree_update", (treeData) => {
@@ -124,7 +127,7 @@ class TreeVisualizer {
 
         this.updateStatus(
           "connected",
-          `Search complete! Found ${data.total_nodes || Object.keys(this.treeData).length} articles.`,
+          `Search complete! Found ${data.total_nodes || Object.keys(this.treeData).length} websites.`,
         )
       })
 
@@ -243,7 +246,7 @@ class TreeVisualizer {
 
     // Emit start search event
     const searchData = {
-      article_title: this.articleTitle,
+      article_data: this.articleData,
     }
 
     console.log("📡 Emitting start_search event with data:", searchData)
@@ -371,22 +374,22 @@ class TreeVisualizer {
         <div class="tree-placeholder__icon">🌳</div>
         <h3 class="tree-placeholder__title">Ready to Explore: ${this.escapeHtml(this.articleTitle)}</h3>
         <p class="tree-placeholder__text">
-          Click "Start Gemini Search" to watch as Google Gemini discovers and maps 
-          related articles in real-time, building a knowledge tree before your eyes.
+          Click "Start Gemini Search" to watch as Google Gemini discovers related websites 
+          and builds a knowledge tree of real articles, blogs, and resources in real-time.
         </p>
         <div class="tree-placeholder__info">
           <div class="info-box info-box--info">
             <span class="info-box__icon">✨</span>
             <div class="info-box__content">
-              <strong>Powered by Google Gemini</strong>
-              <p>Advanced AI with faster responses and better understanding of complex topics.</p>
+              <strong>Powered by Google Gemini + Google Search</strong>
+              <p>AI generates smart search queries, then finds real websites with articles, tutorials, and resources.</p>
             </div>
           </div>
         </div>
         <div class="tree-placeholder__features">
           <div class="feature">
-            <span class="feature__icon">⚡</span>
-            <span class="feature__text">Fast discovery</span>
+            <span class="feature__icon">🔍</span>
+            <span class="feature__text">Real websites</span>
           </div>
           <div class="feature">
             <span class="feature__icon">🔗</span>
@@ -394,7 +397,7 @@ class TreeVisualizer {
           </div>
           <div class="feature">
             <span class="feature__icon">🎯</span>
-            <span class="feature__text">Relevant topics</span>
+            <span class="feature__text">Relevant content</span>
           </div>
         </div>
       </div>
@@ -428,11 +431,35 @@ class TreeVisualizer {
         statusIcon = "⚪"
     }
 
+    // Create the main node content with website information
+    const nodeTitle = this.escapeHtml(node.title)
+    const nodeSource = node.source ? this.escapeHtml(node.source) : ""
+    const nodeUrl = node.url || ""
+    const nodeSnippet = node.snippet ? this.escapeHtml(node.snippet) : ""
+    const searchQuery = node.search_query ? this.escapeHtml(node.search_query) : ""
+
     contentElement.innerHTML = `
-      <div class="tree-node__status"></div>
-      <div class="tree-node__icon">${statusIcon}</div>
-      <div class="tree-node__title">${this.escapeHtml(node.title)}</div>
-      <div class="tree-node__timestamp">${this.formatTimestamp(node.timestamp)}</div>
+      <div class="tree-node__header">
+        <div class="tree-node__status-icon">${statusIcon}</div>
+        <div class="tree-node__main">
+          <div class="tree-node__title-row">
+            <h4 class="tree-node__title">${nodeTitle}</h4>
+            ${nodeSource ? `<span class="tree-node__source">${nodeSource}</span>` : ""}
+          </div>
+          ${nodeSnippet ? `<p class="tree-node__snippet">${nodeSnippet}</p>` : ""}
+          ${searchQuery ? `<div class="tree-node__query">🔍 Found via: "${searchQuery}"</div>` : ""}
+          ${
+            nodeUrl
+              ? `<div class="tree-node__url">
+            <a href="${nodeUrl}" target="_blank" rel="noopener noreferrer" class="tree-node__link">
+              🔗 Visit Website
+            </a>
+          </div>`
+              : ""
+          }
+        </div>
+        <div class="tree-node__timestamp">${this.formatTimestamp(node.timestamp)}</div>
+      </div>
     `
 
     // Add error message if present
@@ -538,26 +565,13 @@ class TreeVisualizer {
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 DOM loaded, initializing TreeVisualizer...")
 
-  // Get article title from the global variable set in the template
-  let articleTitle = null
+  // Get article data from the global variable set in the template
+  const articleData = window.ARTICLE_DATA
 
-  // Declare ARTICLE_TITLE variable before using it
-  const ARTICLE_TITLE = window.ARTICLE_TITLE
+  if (articleData && articleData.title) {
+    console.log("📖 Article data from window.ARTICLE_DATA:", articleData)
 
-  if (typeof ARTICLE_TITLE !== "undefined" && ARTICLE_TITLE) {
-    articleTitle = ARTICLE_TITLE
-    console.log("📖 Article title from template:", articleTitle)
-  } else {
-    // Fallback: try to get from URL
-    const pathParts = window.location.pathname.split("/")
-    if (pathParts.length >= 3 && pathParts[1] === "tree") {
-      articleTitle = decodeURIComponent(pathParts[2])
-      console.log("🔄 Article title from URL:", articleTitle)
-    }
-  }
-
-  if (articleTitle) {
-    window.treeVisualizer = new TreeVisualizer(articleTitle)
+    window.treeVisualizer = new TreeVisualizer(articleData)
 
     // Add debug functions to global scope
     window.debugTree = {
@@ -574,6 +588,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     console.log("🔧 Debug functions available: window.debugTree")
   } else {
-    console.error("❌ Could not determine article title")
+    console.error("❌ Could not determine article data from window.ARTICLE_DATA")
   }
 })

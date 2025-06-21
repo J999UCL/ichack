@@ -13,6 +13,13 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
     DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
+    # Google Custom Search API settings
+    GOOGLE_SEARCH_API_KEY = os.environ["GOOGLE_SEARCH_API_KEY"]
+    GOOGLE_SEARCH_ENGINE_ID = os.environ['GOOGLE_SEARCH_ENGINE_ID']
+
+    SEARCH_RESULTS_LIMIT = int(os.getenv('SEARCH_RESULTS_LIMIT', '10'))
+    SEARCH_KEYWORDS = ['article', 'news', 'blog', 'post', 'guide', 'tutorial', 'review', 'analysis']
+
     # Google Gemini settings
     GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')

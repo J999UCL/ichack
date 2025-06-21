@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Article Tree - {{ article_title }} | Gemini Explorer</title>
+    <title>Article Tree - {{ article_data.title }} | Gemini Explorer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree.css') }}">
 </head>
@@ -11,9 +11,9 @@
     <div class="container">
         <header class="header">
             <div class="header__nav">
-                <a href="/" class="header__back">← Back to Articles</a>
+                <a href="/" class="header__back">← Back to Search</a>
                 <div class="header__title-section">
-                    <h1 class="header__title">Exploring: {{ article_title }}</h1>
+                    <h1 class="header__title">Exploring: {{ article_data.title }}</h1>
                     <div class="header__ai-info">
                         <span class="ai-badge ai-badge--small ai-badge--gemini">
                             <span class="ai-badge__icon">✨</span>
@@ -54,7 +54,7 @@
 
     <!-- Debug panel (only visible in development) -->
     <div id="debug-panel" style="position: fixed; bottom: 10px; right: 10px; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 12px; display: none;">
-        <div>Article: <span id="debug-article">{{ article_title }}</span></div>
+        <div>Article: <span id="debug-article">{{ article_data.title }}</span></div>
         <div>Socket: <span id="debug-socket">❌</span></div>
         <div>Searching: <span id="debug-searching">❌</span></div>
         <button onclick="window.debugTree?.testConnection()" style="margin-top: 5px;">Test Connection</button>
@@ -65,11 +65,11 @@
     <!-- Load Socket.IO from CDN FIRST -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
 
-    <!-- Pass article title to JavaScript BEFORE loading our script -->
+    <!-- Pass article data to JavaScript BEFORE loading our script -->
     <script>
-        // Make article title available globally BEFORE tree.js loads
-        window.ARTICLE_TITLE = "{{ article_title }}";
-        console.log("📖 Article title set globally:", window.ARTICLE_TITLE);
+        // Make article data available globally BEFORE tree.js loads
+        window.ARTICLE_DATA = {{ article_data | tojson }};
+        console.log("📖 Article data set globally:", window.ARTICLE_DATA);
 
         // Debug panel functions
         function toggleDebugPanel() {
@@ -124,7 +124,7 @@
         });
     </script>
 
-    <!-- Load our tree visualization script AFTER Socket.IO and article title are set -->
+    <!-- Load our tree visualization script AFTER Socket.IO and article data are set -->
     <script src="{{ url_for('static', filename='js/tree.js') }}"></script>
 </body>
 </html>
