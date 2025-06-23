@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Article Tree - {{ article_data.title }} | Gemini Explorer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tree.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header__nav">
+                <a href="/" class="header__back">← Back to Search</a>
+                <div class="header__title-section">
+                    <h1 class="header__title">Exploring: {{ article_data.title }}</h1>
+                    <div class="header__ai-info">
+                        <span class="ai-badge ai-badge--small ai-badge--gemini">
+                            <span class="ai-badge__icon">✨</span>
+                            <span class="ai-badge__text">Gemini is finding connections</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="header__status">
+                <span class="status-indicator" id="status-indicator">
+                    <span class="status-indicator__dot"></span>
+                    <span class="status-indicator__text">Connecting...</span>
+                </span>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="tree-container">
+                <div class="tree-controls">
+                    <div class="tree-controls__left">
+                        <button class="btn btn--secondary" id="expand-all" type="button">Expand All</button>
+                        <button class="btn btn--secondary" id="collapse-all" type="button">Collapse All</button>
+                    </div>
+                    <div class="tree-controls__right">
+                        <button class="btn btn--primary btn--gemini" id="start-search" type="button" disabled>
+                            <span class="btn__icon">✨</span>
+                            Start Gemini Search
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tree-visualization" id="tree-visualization">
+                    <!-- Tree content will be populated here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Debug panel (only visible in development) -->
+    <div id="debug-panel" style="position: fixed; bottom: 10px; right: 10px; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 12px; display: none;">
+        <div>Article: <span id="debug-article">{{ article_data.title }}</span></div>
+        <div>Socket: <span id="debug-socket">❌</span></div>
+        <div>Searching: <span id="debug-searching">❌</span></div>
+        <button onclick="window.debugTree?.testConnection()" style="margin-top: 5px;">Test Connection</button>
+        <button onclick="window.debugTree?.forceSearch()" style="margin-top: 5px;">Force Search</button>
+        <button onclick="toggleDebugPanel()" style="margin-top: 5px;">Hide</button>
+    </div>
+
+    <!-- Load Socket.IO from CDN FIRST -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+
+    <!-- Pass article data to JavaScript BEFORE loading our script -->
+    <script>
+        // Make article data available globally BEFORE tree.js loads
+        window.ARTICLE_DATA = {{ article_data | tojson }};
+        console.log("📖 Article data set globally:", window.ARTICLE_DATA);
+
+        // Debug panel functions
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debug-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function updateDebugInfo() {
+            if (window.treeVisualizer && window.debugTree) {
+                const status = window.debugTree.getStatus();
+                if (status) {
+                    document.getElementById('debug-socket').textContent = status.socketConnected ? '✅' : '❌';
+                    document.getElementById('debug-searching').textContent = status.isSearching ? '🔍' : '❌';
+                }
+            }
+        }
+
+        // Show debug panel in development
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            document.getElementById('debug-panel').style.display = 'block';
+            setInterval(updateDebugInfo, 1000);
+        }
+
+        // Add keyboard shortcuts for debugging
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey) {
+                switch(e.key) {
+                    case 'D':
+                        e.preventDefault();
+                        toggleDebugPanel();
+                        break;
+                    case 'T':
+                        e.preventDefault();
+                        window.debugTree?.testConnection();
+                        break;
+                    case 'S':
+                        e.preventDefault();
+                        window.debugTree?.forceSearch();
+                        break;
+                }
+            }
+        });
+
+        // Test Socket.IO availability immediately
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🔍 Testing Socket.IO availability...');
+            if (typeof io !== 'undefined') {
+                console.log('✅ Socket.IO loaded successfully');
+            } else {
+                console.error('❌ Socket.IO not loaded!');
+            }
+        });
+    </script>
+
+    <!-- Load our tree visualization script AFTER Socket.IO and article data are set -->
+    <script src="{{ url_for('static', filename='js/tree.js') }}"></script>
+</body>
+</html>

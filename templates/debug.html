@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Socket.IO Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            border-left: 4px solid #ccc;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            border-left-color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left-color: #2e7d32;
+        }
+        .info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left-color: #1565c0;
+        }
+        .warning {
+            background: #fff3e0;
+            color: #ef6c00;
+            border-left-color: #ef6c00;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #2563eb;
+            color: white;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 5px;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .status.disconnected {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+        #logs {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            margin: 5px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Socket.IO Debug Console</h1>
+
+        <div class="controls">
+            <h3>Connection Status: <span id="connection-status" class="status disconnected">Disconnected</span></h3>
+
+            <div>
+                <button onclick="testConnection()">Test Connection</button>
+                <button onclick="testPing()">Ping Server</button>
+                <button onclick="clearLogs()">Clear Logs</button>
+                <button onclick="reconnect()">Reconnect</button>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <input type="text" id="article-input" placeholder="Enter article title" value="Artificial Intelligence">
+                <button onclick="testSearch()">Test Search</button>
+                <button onclick="getRateLimit()">Check Rate Limit</button>
+            </div>
+        </div>
+
+        <h3>📋 Event Log</h3>
+        <div id="logs"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const logsDiv = document.getElementById('logs');
+        const statusDiv = document.getElementById('connection-status');
+
+        function addLog(message, type = 'info') {
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logDiv);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            logsDiv.innerHTML = '';
+        }
+
+        function updateStatus(connected) {
+            statusDiv.textContent = connected ? 'Connected' : 'Disconnected';
+            statusDiv.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function testConnection() {
+            addLog('🧪 Testing connection...', 'info');
+            socket.emit('test', { message: 'Hello from debug console', timestamp: Date.now() });
+        }
+
+        function testPing() {
+            addLog('🏓 Sending ping...', 'info');
+            socket.emit('ping');
+        }
+
+        function testSearch() {
+            const articleTitle = document.getElementById('article-input').value.trim();
+            if (!articleTitle) {
+                addLog('❌ Please enter an article title', 'error');
+                return;
+            }
+            addLog(`🔍 Testing search for: ${articleTitle}`, 'info');
+            socket.emit('start_search', { article_title: articleTitle });
+        }
+
+        function getRateLimit() {
+            addLog('📊 Requesting rate limit status...', 'info');
+            socket.emit('get_rate_limit_status');
+        }
+
+        function reconnect() {
+            addLog('🔄 Attempting to reconnect...', 'warning');
+            socket.disconnect();
+            socket.connect();
+        }
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            addLog(`✅ Connected to server! Socket ID: ${socket.id}`, 'success');
+            updateStatus(true);
+        });
+
+        socket.on('disconnect', (reason) => {
+            addLog(`❌ Disconnected from server. Reason: ${reason}`, 'error');
+            updateStatus(false);
+        });
+
+        socket.on('connect_error', (error) => {
+            addLog(`❌ Connection error: ${error}`, 'error');
+            updateStatus(false);
+        });
+
+        socket.on('connected', (data) => {
+            addLog(`📡 Server response: ${data.message}`, 'success');
+        });
+
+        socket.on('search_started', (data) => {
+            addLog(`🔍 Search started for: ${data.article} using ${data.ai_provider}`, 'info');
+        });
+
+        socket.on('tree_update', (data) => {
+            addLog(`📊 Tree update received: ${Object.keys(data).length} nodes`, 'info');
+        });
+
+        socket.on('search_complete', (data) => {
+            addLog(`✅ Search complete: ${data.message} (${data.total_nodes} nodes)`, 'success');
+        });
+
+        socket.on('rate_limit_warning', (data) => {
+            addLog(`⚠️ Rate limit: ${data.message}`, 'warning');
+        });
+
+        socket.on('rate_limit_status', (data) => {
+            addLog(`📊 Rate limit status: ${JSON.stringify(data)}`, 'info');
+        });
+
+        socket.on('error', (data) => {
+            addLog(`❌ Error: ${data.message}`, 'error');
+        });
+
+        socket.on('pong', (data) => {
+            addLog(`🏓 Pong received: ${JSON.stringify(data)}`, 'success');
+        });
+
+        // Initial log
+        addLog('🚀 Debug console loaded. Testing connection...', 'info');
+    </script>
+</body>
+</html>

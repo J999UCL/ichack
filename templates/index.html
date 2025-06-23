@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Article Explorer - Powered by Google Gemini</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="header__title">Article Explorer</h1>
+            <p class="header__subtitle">Search for articles and explore their connections with Google Gemini</p>
+            <div class="header__ai-badge">
+                <span class="ai-badge ai-badge--gemini">
+                    <span class="ai-badge__icon">✨</span>
+                    <span class="ai-badge__text">Powered by Google Gemini</span>
+                </span>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <h2 class="search__title">What would you like to explore?</h2>
+                    <div class="search-form">
+                        <div class="search-input-container">
+                            <input
+                                type="text"
+                                id="search-input"
+                                class="search-input"
+                                placeholder="Search for articles, news, blogs, tutorials..."
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button id="search-btn" class="search-btn" type="button">
+                                <span class="search-btn__icon">🔍</span>
+                                <span class="search-btn__text">Search</span>
+                            </button>
+                        </div>
+                        <div class="search-suggestions">
+                            <span class="suggestions-label">Try:</span>
+                            <button class="suggestion-tag" data-query="artificial intelligence">AI</button>
+                            <button class="suggestion-tag" data-query="climate change">Climate</button>
+                            <button class="suggestion-tag" data-query="space exploration">Space</button>
+                            <button class="suggestion-tag" data-query="quantum computing">Quantum</button>
+                            <button class="suggestion-tag" data-query="renewable energy">Energy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section class="loading" id="loading" style="display: none;">
+                <div class="loading__spinner"></div>
+                <p class="loading__text">Searching for articles...</p>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results" id="results-container" style="display: none;">
+                <h2 class="results__title">Search Results</h2>
+                <p class="results__description">
+                    Click on any article to see how Google Gemini explores related topics in real-time
+                </p>
+                <div class="results__grid" id="results-grid">
+                    <!-- Search results will be populated here -->
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error" id="error-container" style="display: none;">
+                <div class="error__content">
+                    <h2 class="error__title">Oops! Something went wrong</h2>
+                    <p class="error__message" id="error-message"></p>
+                    <button class="btn btn--primary error__retry" onclick="retrySearch()">
+                        <span class="btn__icon">🔄</span>
+                        Try Again
+                    </button>
+                    <button class="btn btn--secondary" onclick="clearSearch()" style="margin-left: 0.5rem;">
+                        <span class="btn__icon">✨</span>
+                        New Search
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+</body>
+</html>
